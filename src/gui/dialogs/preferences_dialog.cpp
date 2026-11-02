@@ -123,8 +123,20 @@ void preferences_dialog::set_resolution_list(menu_button& res_list)
 		options.push_back(std::move(option));
 	}
 
-	const unsigned current_res = std::distance(resolutions_.begin(), std::find(
-		resolutions_.begin(), resolutions_.end(), video::current_resolution()));
+	const point current = video::current_resolution();
+	auto it = std::find(resolutions_.begin(), resolutions_.end(), current);
+
+	// The current resolution may be missing from the list (e.g. on Android or
+	// unusual displays). Add it rather than passing an out-of-range index.
+	if(it == resolutions_.end()) {
+		resolutions_.push_back(current);
+		config option;
+		option["label"] = formatter() << current.x << font::unicode_multiplication_sign << current.y;
+		options.push_back(std::move(option));
+		it = resolutions_.end() - 1;
+	}
+
+	const unsigned current_res = std::distance(resolutions_.begin(), it);
 
 	res_list.set_values(options, current_res);
 }
@@ -140,6 +152,11 @@ void preferences_dialog::set_theme_list(menu_button& theme_list)
 		if(themes_[i].id == prefs::get().theme()) {
 			current_theme = i;
 		}
+	}
+
+	if(options.empty()) {
+		theme_list.set_active(false);
+		return;
 	}
 
 	theme_list.set_values(options, current_theme);

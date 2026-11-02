@@ -767,7 +767,15 @@ std::vector<point> get_available_resolutions(const bool include_current)
 	std::vector<point> result;
 
 #ifdef __ANDROID__
-	result.push_back(prefs::get().resolution());
+	// On Android the window always fills the screen, so the only meaningful
+	// resolution is the actual window size. The saved preference can differ
+	// from it (e.g. on high-DPI tablets), which previously left the current
+	// resolution missing from this list and crashed the preferences dialog.
+	if(window) {
+		result.push_back(current_resolution());
+	} else {
+		result.push_back(prefs::get().resolution());
+	}
 	return result;
 #endif
 
