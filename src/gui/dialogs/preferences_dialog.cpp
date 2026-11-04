@@ -327,7 +327,12 @@ void preferences_dialog::apply_pixel_scale()
 {
 	// Update pixel scale preference.
 	slider& ps_slider = find_widget<slider>("pixel_scale_slider");
+#ifdef __ANDROID__
+	// The slider is in tenths on Android (15 = 1.5x).
+	prefs::get().set_pixel_scale_tenths(ps_slider.get_value());
+#else
 	prefs::get().set_pixel_scale(ps_slider.get_value());
+#endif
 
 	// Update auto pixel scale preference.
 	toggle_button& auto_ps_toggle =
@@ -518,12 +523,22 @@ void preferences_dialog::initialize_callbacks()
 		[this](auto&&...) { fullscreen_left_callback(); });
 
 	/* PIXEL SCALE */
+#ifdef __ANDROID__
+	// On Android the scale can be set in steps of 0.1, stored as tenths.
+	register_integer("pixel_scale_slider", true,
+		[]() {return prefs::get().pixel_scale_tenths();},
+		[](int v) {prefs::get().set_pixel_scale_tenths(v);});
+
+	slider& ps_slider = find_widget<slider>("pixel_scale_slider");
+	ps_slider.set_value_range(10, video::get_max_pixel_scale_tenths());
+#else
 	register_integer("pixel_scale_slider", true,
 		[]() {return prefs::get().pixel_scale();},
 		[](int v) {prefs::get().set_pixel_scale(v);});
 
 	slider& ps_slider = find_widget<slider>("pixel_scale_slider");
 	ps_slider.set_value_range(1, video::get_max_pixel_scale());
+#endif
 	connect_signal_mouse_left_release(ps_slider,
 		[this](auto&&...) { apply_pixel_scale(); });
 
@@ -533,7 +548,12 @@ void preferences_dialog::initialize_callbacks()
 		[](bool v) {prefs::get().set_auto_pixel_scale(v);},
 		[&](widget& w) { disable_widget_on_toggle_inverted<slider>(*this, w, "pixel_scale_slider"); }, true);
 
-	if (video::get_max_pixel_scale() <= 1) {
+#ifdef __ANDROID__
+	const bool can_scale = video::get_max_pixel_scale_tenths() > 10;
+#else
+	const bool can_scale = video::get_max_pixel_scale() > 1;
+#endif
+	if (!can_scale) {
 		find_widget<slider>("pixel_scale_slider").set_active(false);
 		find_widget<toggle_button>("auto_pixel_scale").set_active(false);
 	}
@@ -1131,7 +1151,16 @@ void preferences_dialog::pre_show()
 	//
 	gui2::bind_default_status_label(find_widget<slider>("max_saves_slider"));
 	gui2::bind_default_status_label(find_widget<slider>("turbo_slider"));
+#ifdef __ANDROID__
+	// Show the tenths value as a decimal multiplier, e.g. 15 -> "1.5x".
+	gui2::bind_status_label(find_widget<slider>("pixel_scale_slider"),
+		[](const slider& s) {
+			const int v = s.get_value();
+			return (formatter() << v / 10 << '.' << v % 10 << font::unicode_multiplication_sign).str();
+		});
+#else
 	gui2::bind_default_status_label(find_widget<slider>("pixel_scale_slider"));
+#endif
 }
 
 // Special fullscreen callback

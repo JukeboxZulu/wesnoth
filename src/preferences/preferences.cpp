@@ -705,6 +705,21 @@ void prefs::set_pixel_scale(const int scale)
 	preferences_[prefs_list::pixel_scale] = std::clamp(scale, pref_constants::min_pixel_scale, pref_constants::max_pixel_scale);
 }
 
+int prefs::pixel_scale_tenths()
+{
+	const int def = pixel_scale() * 10;
+	return std::clamp(preferences_[prefs_list::pixel_scale_tenths].to_int(def),
+		pref_constants::min_pixel_scale * 10, pref_constants::max_pixel_scale * 10);
+}
+
+void prefs::set_pixel_scale_tenths(const int tenths)
+{
+	const int t = std::clamp(tenths, pref_constants::min_pixel_scale * 10, pref_constants::max_pixel_scale * 10);
+	preferences_[prefs_list::pixel_scale_tenths] = t;
+	// Keep the whole-number preference in step, rounded down.
+	set_pixel_scale(t / 10);
+}
+
 bool prefs::turbo()
 {
 	if(video::headless()) {

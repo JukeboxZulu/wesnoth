@@ -174,9 +174,12 @@ public:
 	 *
 	 * @param w              Width of the window's rendering surface
 	 * @param h              Height of the window's rendering surface
+	 * @param fractional     If true, allow a non-integer scale between the
+	 *                       logical size and the output size (letterboxed).
+	 *                       Otherwise only integer scaling is used.
 	 */
-	void set_logical_size(int w, int h);
-	void set_logical_size(const point& p);
+	void set_logical_size(int w, int h, bool fractional = false);
+	void set_logical_size(const point& p, bool fractional = false);
 
 	point get_logical_size() const;
 	void get_logical_size(int& w, int& h) const;

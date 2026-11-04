@@ -70,6 +70,15 @@ int refresh_rate_ = 0;
 point game_canvas_size_ = {0, 0};
 int pixel_scale_ = 1;
 int max_scale_ = 1;
+/** Active pixel scale in tenths. Only differs from pixel_scale_ * 10 on Android. */
+int pixel_scale_tenths_ = 10;
+int max_scale_tenths_ = 10;
+/**
+ * True when a non-integer pixel scale is active (Android only). The game then
+ * draws at 1x into a render texture of the logical size, and that texture is
+ * stretched to the output when presented.
+ */
+bool fractional_scale_ = false;
 rect input_area_ = {};
 
 } // anon namespace
@@ -203,6 +212,8 @@ bool update_test_framebuffer()
 	}
 
 	pixel_scale_ = 1;
+	pixel_scale_tenths_ = 10;
+	fractional_scale_ = false;
 	game_canvas_size_ = test_resolution_;
 	input_area_ = {{}, test_resolution_};
 
@@ -250,16 +261,44 @@ bool update_framebuffer()
 	} else {
 		scale = std::min(max_scale_, prefs::get().pixel_scale());
 	}
+
+	int tenths = scale * 10;
+	max_scale_tenths_ = max_scale_ * 10;
+#ifdef __ANDROID__
+	// On Android the pixel scale can be set in steps of 0.1. The largest
+	// allowed scale still keeps the game area at or above the minimum size.
+	max_scale_tenths_ = std::min(
+		osize.x * 10 / pref_constants::min_window_width,
+		osize.y * 10 / pref_constants::min_window_height);
+	max_scale_tenths_ = std::clamp(max_scale_tenths_, 10, pref_constants::max_pixel_scale * 10);
+	if (!prefs::get().auto_pixel_scale()) {
+		tenths = std::min(max_scale_tenths_, prefs::get().pixel_scale_tenths());
+		// Whole-number scales keep using the normal (sharp) rendering path.
+		scale = tenths % 10 == 0 ? tenths / 10 : 1;
+	}
+#endif
+	const bool fractional = tenths % 10 != 0;
+	if (fractional != fractional_scale_ || tenths != pixel_scale_tenths_) {
+		fractional_scale_ = fractional;
+		pixel_scale_tenths_ = tenths;
+		changed = true;
+	}
+
 	// Cache it for easy access.
 	if (pixel_scale_ != scale) {
 		pixel_scale_ = scale;
 		changed = true;
 	}
 
+	// The logical (game canvas) size for this scale.
+	const point want_lsize = fractional
+		? point(osize.x * 10 / tenths, osize.y * 10 / tenths)
+		: point(osize.x / scale, osize.y / scale);
+
 	// Update logical size if it doesn't match the current resolution and scale.
 	point lsize(window->get_logical_size());
 	point wsize(window->get_size());
-	if (lsize.x != osize.x / scale || lsize.y != osize.y / scale) {
+	if (lsize != want_lsize || changed) {
 		if (!prefs::get().auto_pixel_scale() && scale < prefs::get().pixel_scale()) {
 			LOG_DP << "reducing pixel scale from desired "
 				<< prefs::get().pixel_scale() << " to maximum allowable "
@@ -270,7 +309,7 @@ bool update_framebuffer()
 		LOG_DP << "  old lsize: " << lsize;
 		LOG_DP << "  old wsize: " << wsize;
 		LOG_DP << "  old osize: " << osize;
-		window->set_logical_size(osize.x / scale, osize.y / scale);
+		window->set_logical_size(want_lsize, fractional);
 		lsize = window->get_logical_size();
 		wsize = window->get_size();
 		osize = window->get_output_size();
@@ -284,12 +323,17 @@ bool update_framebuffer()
 	// Cache it for easy access
 	game_canvas_size_ = lsize;
 
+	// With an integer scale the render texture is full output resolution and
+	// drawing is scaled up into it. With a fractional scale it is the logical
+	// size (drawn at 1x) and gets stretched when presented to the screen.
+	const point tsize = fractional ? lsize : osize;
+
 	// Build or update the current render texture.
 	if (render_texture_) {
 		SDL_PropertiesID props = SDL_GetTextureProperties(render_texture_.get());
 		int w = SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_WIDTH_NUMBER, 0);
 		int h = SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_HEIGHT_NUMBER, 0);
-		if (w != osize.x || h != osize.y) {
+		if (w != tsize.x || h != tsize.y) {
 			// Delete it and let it be recreated.
 			LOG_DP << "destroying old render texture";
 			render_texture_.reset();
@@ -304,11 +348,17 @@ bool update_framebuffer()
 			*window,
 			SDL_PIXELFORMAT_ARGB8888,
 			SDL_TEXTUREACCESS_TARGET,
-			osize.x, osize.y
+			tsize.x, tsize.y
 		));
 		// This isn't really necessary, but might be nice to have attached
 		render_texture_.set_draw_size(lsize);
 		changed = true;
+	}
+
+	// Smooth (bilinear) filtering when stretching by a fractional amount;
+	// nearest-neighbour would give uneven pixel widths that shimmer.
+	if (fractional) {
+		SDL_SetTextureScaleMode(render_texture_.get(), SDL_SCALEMODE_LINEAR);
 	}
 
 	// Assign the render texture now. It will be used for all drawing.
@@ -317,8 +367,11 @@ bool update_framebuffer()
 	// By default input area is the same as the window area.
 	input_area_ = {{}, wsize};
 
+	// With a fractional scale the whole render texture is stretched to the
+	// screen by SDL, and input is converted back by SDL as well, so there is
+	// no offset to account for.
 	rect active_area = to_output(draw_area());
-	if (active_area.size() != osize) {
+	if (!fractional && active_area.size() != osize) {
 		LOG_DP << "render target offset: LT " << active_area.origin() << " RB "
 		       << osize - active_area.size() - active_area.origin();
 		// Translate active_area into display coordinates as input_area_
@@ -446,6 +499,11 @@ rect draw_area()
 
 point draw_offset()
 {
+	// With a fractional scale the render texture is exactly the draw size.
+	if (fractional_scale_) {
+		return {0, 0};
+	}
+
 	// As we are using SDL_RenderSetIntegerScale, there may be a slight
 	// offset of the drawable area on the render target if the target size
 	// is not perfectly divisble by the scale.
@@ -485,6 +543,16 @@ int get_pixel_scale()
 int get_max_pixel_scale()
 {
 	return max_scale_;
+}
+
+int get_pixel_scale_tenths()
+{
+	return pixel_scale_tenths_;
+}
+
+int get_max_pixel_scale_tenths()
+{
+	return max_scale_tenths_;
 }
 
 int native_refresh_rate()
@@ -538,7 +606,7 @@ void force_render_target(const texture& t)
 	// so make sure it gets set back appropriately.
 	if (!t) {
 		DBG_DP << "rendering to window / screen";
-		window->set_logical_size(game_canvas_size_);
+		window->set_logical_size(game_canvas_size_, fractional_scale_);
 	} else if (t == render_texture_) {
 		DBG_DP << "rendering to primary buffer";
 		window->set_logical_size(game_canvas_size_);

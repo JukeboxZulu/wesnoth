@@ -225,18 +225,21 @@ int window::get_display_index()
 	return SDL_GetDisplayForWindow(window_);
 }
 
-void window::set_logical_size(int w, int h)
+void window::set_logical_size(int w, int h, bool fractional)
 {
 	SDL_Renderer* r = SDL_GetRenderer(window_);
-	// Non-integer scales are not currently supported.
-	// This option makes things neater when window size is not a perfect
+	// Integer scaling makes things neater when window size is not a perfect
 	// multiple of logical size, which can happen when manually resizing.
-	SDL_SetRenderLogicalPresentation(r, w, h, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
+	// Fractional scaling (used for non-integer pixel scales on Android)
+	// stretches the logical area to fill the output, keeping aspect ratio.
+	SDL_SetRenderLogicalPresentation(r, w, h, fractional
+		? SDL_LOGICAL_PRESENTATION_LETTERBOX
+		: SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 }
 
-void window::set_logical_size(const point& p)
+void window::set_logical_size(const point& p, bool fractional)
 {
-	set_logical_size(p.x, p.y);
+	set_logical_size(p.x, p.y, fractional);
 }
 
 point window::get_logical_size() const

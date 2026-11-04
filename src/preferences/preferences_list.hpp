@@ -214,6 +214,8 @@ struct preferences_list_defines
 	ADDPREF(partial_orb_color)
 	/** the pixel scale multiplier to apply */
 	ADDPREF(pixel_scale)
+	/** the pixel scale multiplier in tenths (15 = 1.5x), allowing non-integer scales on Android */
+	ADDPREF(pixel_scale_tenths)
 	/** whether to allow any type of mirrors in a multiplayer scenario */
 	ADDPREF(random_faction_mode)
 	/** whether to remember passwords typed into password fields */
@@ -498,6 +500,7 @@ struct preferences_list_defines
 		options,
 		partial_orb_color,
 		pixel_scale,
+		pixel_scale_tenths,
 		random_faction_mode,
 		remember_password,
 		save_replays,

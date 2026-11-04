@@ -258,6 +258,10 @@ public:
 
 	int pixel_scale();
 	void set_pixel_scale(const int scale);
+	/** Pixel scale in tenths (15 = 1.5x). Defaults to pixel_scale() * 10. */
+	int pixel_scale_tenths();
+	/** Also updates pixel_scale() to the whole-number part. */
+	void set_pixel_scale_tenths(const int tenths);
 
 	bool turbo();
 	void set_turbo(bool ison);
@@ -870,6 +874,7 @@ private:
 		prefs_list::show_tips,
 		prefs_list::mp_server_program_name,
 		prefs_list::pixel_scale,
+		prefs_list::pixel_scale_tenths,
 		prefs_list::theme,
 		prefs_list::tile_size,
 		prefs_list::vsync,

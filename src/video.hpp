@@ -244,6 +244,19 @@ int get_pixel_scale();
 int get_max_pixel_scale();
 
 /**
+ * The active pixel scale in tenths (15 = 1.5x).
+ *
+ * On Android the pixel scale may be non-integer. In that case the game is
+ * drawn at 1x into a smaller buffer, which is then stretched to fill the
+ * screen, and get_pixel_scale() returns 1. Elsewhere this is always
+ * get_pixel_scale() * 10.
+ */
+int get_pixel_scale_tenths();
+
+/** Maximum allowed pixel scale in tenths (see get_pixel_scale_tenths). */
+int get_max_pixel_scale_tenths();
+
+/**
  * Convert coordinates in draw space to coordinates in render space.
  */
 rect to_output(const rect& draw_space_rect);
